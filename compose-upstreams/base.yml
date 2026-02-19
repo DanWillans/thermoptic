@@ -16,7 +16,7 @@ services:
     build:
       context: ../chrome/
     platform: linux/amd64
-    mem_limit: 768m
+    mem_limit: 1g
     deploy:
       resources:
         limits:
