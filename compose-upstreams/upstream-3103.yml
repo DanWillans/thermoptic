@@ -9,8 +9,9 @@ services:
       - "host.docker.internal:host-gateway"
   chrome:
     container_name: thermoptic-3103-chrome
-    ports:
-      - "127.0.0.1:14124:14111"
+    environment:
+      ENABLE_GUI_CONTROL: "false"
+    ports: []
   thermoptic:
     container_name: thermoptic-3103
     ports:

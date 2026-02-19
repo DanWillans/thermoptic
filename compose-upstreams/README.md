@@ -17,13 +17,13 @@ Flow: Client → thermoptic → Chrome → proxyrouter → host:UPSTREAM_PORT �
 
 Each stack exposes:
 - Thermoptic proxy: `127.0.0.1:13090` … `127.0.0.1:13109` (client connects here)
-- Xpra UI: `127.0.0.1:14111` … `127.0.0.1:14130` (one per stack)
+- GUI/Xpra: disabled (headless Chrome only)
 
 Upstream proxies (your proxies) must run on host ports 3090–3109.
 
-| Upstream | Thermoptic (client) | Xpra |
-|----------|---------------------|------|
-| host:3090 | 127.0.0.1:13090 | 127.0.0.1:14111 |
-| host:3091 | 127.0.0.1:13091 | 127.0.0.1:14112 |
-| … | … | … |
-| host:3109 | 127.0.0.1:13109 | 127.0.0.1:14130 |
+| Upstream | Thermoptic (client) |
+|----------|---------------------|
+| host:3090 | 127.0.0.1:13090 |
+| host:3091 | 127.0.0.1:13091 |
+| … | … |
+| host:3109 | 127.0.0.1:13109 |
