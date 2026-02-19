@@ -1,7 +1,8 @@
 # Upstream proxy compose overrides
 
 Each file routes thermoptic traffic through a different upstream proxy on the host
-(localhost:PORT). Use with the base compose:
+(localhost:PORT). Use with the base compose. Projects are named `thermoptic-upstream-NNNN`
+to avoid conflicts with other compose configs.
 
 ```bash
 # Single stack (e.g. upstream proxy on localhost:3090)

@@ -2,7 +2,7 @@
 # so each upstream-NNNN.yml can define its own without merge conflicts.
 #
 # CPU reduction (20 Chrome instances): smaller screen, CPU cap, lower memory.
-# Tune CHROME_SCREEN_*, deploy.resources, mem_limit as needed.
+# Tune CHROME_SCREEN_*, deploy.resources.limits as needed.
 services:
   proxyrouter:
     build:

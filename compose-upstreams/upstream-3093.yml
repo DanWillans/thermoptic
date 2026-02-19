@@ -1,15 +1,15 @@
-name: thermoptic-3093
+name: thermoptic-upstream-3093
 
 services:
   proxyrouter:
-    container_name: thermoptic-3093-proxyrouter
+    container_name: thermoptic-upstream-3093-proxyrouter
     environment:
       UPSTREAM_PROXY: "http://host.docker.internal:3093"
     extra_hosts:
       - "host.docker.internal:host-gateway"
   chrome:
-    container_name: thermoptic-3093-chrome
+    container_name: thermoptic-upstream-3093-chrome
   thermoptic:
-    container_name: thermoptic-3093
+    container_name: thermoptic-upstream-3093
     ports:
       - "127.0.0.1:13093:1234"
