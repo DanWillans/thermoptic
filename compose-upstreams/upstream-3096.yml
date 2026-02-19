@@ -14,4 +14,4 @@ services:
   thermoptic:
     container_name: thermoptic-3096
     ports:
-      - "127.0.0.1:3096:1234"
+      - "127.0.0.1:13096:1234"

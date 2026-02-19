@@ -13,13 +13,17 @@ docker compose -f docker-compose.yml -f compose-upstreams/upstream-3090.yml up -
 ./compose-upstreams/stop-all.sh
 ```
 
+Flow: Client → thermoptic → Chrome → proxyrouter → host:UPSTREAM_PORT → internet
+
 Each stack exposes:
-- Thermoptic proxy: `127.0.0.1:PORT` (client connects here; Chrome routes through host proxy on same port)
+- Thermoptic proxy: `127.0.0.1:13090` … `127.0.0.1:13109` (client connects here)
 - Xpra UI: `127.0.0.1:14111` … `127.0.0.1:14130` (one per stack)
 
-| Port | Thermoptic | Xpra |
-|------|------------|------|
-| 3090 | 127.0.0.1:3090 | 127.0.0.1:14111 |
-| 3091 | 127.0.0.1:3091 | 127.0.0.1:14112 |
+Upstream proxies (your proxies) must run on host ports 3090–3109.
+
+| Upstream | Thermoptic (client) | Xpra |
+|----------|---------------------|------|
+| host:3090 | 127.0.0.1:13090 | 127.0.0.1:14111 |
+| host:3091 | 127.0.0.1:13091 | 127.0.0.1:14112 |
 | … | … | … |
-| 3109 | 127.0.0.1:3109 | 127.0.0.1:14130 |
+| host:3109 | 127.0.0.1:13109 | 127.0.0.1:14130 |

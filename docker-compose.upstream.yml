@@ -1,7 +1,9 @@
 # Use with: docker compose -f docker-compose.yml -f docker-compose.upstream.yml up
 #
 # Routes all outbound traffic through an upstream proxy on the host at localhost:3090.
-# Chrome -> proxyrouter -> host:3090 -> internet
+# Client -> thermoptic:1234 -> Chrome -> proxyrouter -> host:3090 -> internet
+#
+# Thermoptic listens on 1234 (same as base). Ensure upstream proxy runs on host:3090.
 services:
   proxyrouter:
     environment:

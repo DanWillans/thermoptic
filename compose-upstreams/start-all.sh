@@ -10,4 +10,4 @@ for p in $(seq 3090 3109); do
   docker compose -f docker-compose.yml -f compose-upstreams/upstream-$p.yml up -d
 done
 
-echo "All 20 stacks started. Thermoptic proxies: 127.0.0.1:3090-3109"
+echo "All 20 stacks started. Thermoptic proxies: 127.0.0.1:13090-13109 (routing through host:3090-3109)"
