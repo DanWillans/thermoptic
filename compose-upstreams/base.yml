@@ -1,0 +1,57 @@
+# Base for upstream stacks. Same as docker-compose.yml but without port mappings
+# so each upstream-NNNN.yml can define its own without merge conflicts.
+services:
+  proxyrouter:
+    build:
+      context: ../proxyrouter/
+    environment:
+      PROXY_ROUTER_PORT: 3128
+      UPSTREAM_PROXY: ""
+    expose:
+      - 3128
+  chrome:
+    build:
+      context: ../chrome/
+    platform: linux/amd64
+    mem_limit: 2g
+    depends_on:
+      - proxyrouter
+    volumes:
+      - chrome_profile:/home/chromeuser/profile
+    environment:
+      PORT: 3003
+      CHROME_CONTROL_PORT: 9223
+      CHROME_CONTROL_COOLDOWN_MS: 5000
+      ENABLE_GUI_CONTROL: "false"
+      XPRA_PORT: 14111
+      CHROME_SCREEN_WIDTH: 1920
+      CHROME_SCREEN_HEIGHT: 1080
+      CHROME_PROXY_SERVER: http://proxyrouter:3128
+      CHROME_PROXY_BYPASS_LIST: "<-loopback>;thermoptic"
+      CHROME_PROXY_ENABLE_DNS: "true"
+      CHROME_PROXY_DNS_EXCLUSIONS: "localhost,thermoptic"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+  thermoptic:
+    build: ..
+    volumes:
+      - ../ssl:/work/cassl
+      - ../hooks:/work/hooks
+      - ../iteration:/work/iteration
+    depends_on:
+      - chrome
+    environment:
+      HTTP_PROXY_PORT: 1234
+      CHROME_DEBUGGING_PORT: 3003
+      CHROME_DEBUGGING_HOST: chrome
+      DEBUG: "false"
+      TRACE: "false"
+      ITERATION_STATE_MODULE_PATH: /work/iteration/example-state.js
+      THERMOPTIC_CONTAINER_RUNTIME: "true"
+      HEALTHCHECK_ENDPOINT_PORT: 8085
+      HEALTHCHECK_ENDPOINT_PATH: /__thermoptic_health
+      CHROME_CONTROL_PORT: 9223
+
+volumes:
+  chrome_profile:

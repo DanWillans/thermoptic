@@ -1,7 +1,0 @@
-# Clears base compose port bindings so upstream overrides don't merge with them.
-# Must be used between docker-compose.yml and upstream-NNNN.yml.
-services:
-  chrome:
-    ports: []
-  thermoptic:
-    ports: []
