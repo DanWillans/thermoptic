@@ -1,5 +1,8 @@
 # Base for upstream stacks. Same as docker-compose.yml but without port mappings
 # so each upstream-NNNN.yml can define its own without merge conflicts.
+#
+# CPU reduction (20 Chrome instances): smaller screen, CPU cap, lower memory.
+# Tune CHROME_SCREEN_*, deploy.resources, mem_limit as needed.
 services:
   proxyrouter:
     build:
@@ -13,7 +16,11 @@ services:
     build:
       context: ../chrome/
     platform: linux/amd64
-    mem_limit: 2g
+    mem_limit: 768m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
     depends_on:
       - proxyrouter
     volumes:
@@ -24,8 +31,8 @@ services:
       CHROME_CONTROL_COOLDOWN_MS: 5000
       ENABLE_GUI_CONTROL: "false"
       XPRA_PORT: 14111
-      CHROME_SCREEN_WIDTH: 1920
-      CHROME_SCREEN_HEIGHT: 1080
+      CHROME_SCREEN_WIDTH: 1024
+      CHROME_SCREEN_HEIGHT: 576
       CHROME_PROXY_SERVER: http://proxyrouter:3128
       CHROME_PROXY_BYPASS_LIST: "<-loopback>;thermoptic"
       CHROME_PROXY_ENABLE_DNS: "true"
