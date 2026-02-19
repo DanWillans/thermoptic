@@ -5,7 +5,7 @@ Each file routes thermoptic traffic through a different upstream proxy on the ho
 
 ```bash
 # Single stack (e.g. upstream proxy on localhost:3090)
-docker compose -f docker-compose.yml -f compose-upstreams/upstream-3090.yml up -d
+docker compose -f docker-compose.yml -f compose-upstreams/clear-ports.yml -f compose-upstreams/upstream-3090.yml up -d
 
 # All 20 stacks (ports 3090–3109)
 ./compose-upstreams/start-all.sh

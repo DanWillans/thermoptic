@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 
 for p in $(seq 3090 3109); do
   echo "Starting thermoptic-$p..."
-  docker compose -f docker-compose.yml -f compose-upstreams/upstream-$p.yml up -d
+  docker compose -f docker-compose.yml -f compose-upstreams/clear-ports.yml -f compose-upstreams/upstream-$p.yml up -d
 done
 
 echo "All 20 stacks started. Thermoptic proxies: 127.0.0.1:13090-13109 (routing through host:3090-3109)"

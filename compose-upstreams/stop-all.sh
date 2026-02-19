@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 for p in $(seq 3090 3109); do
   echo "Stopping thermoptic-$p..."
-  docker compose -f docker-compose.yml -f compose-upstreams/upstream-$p.yml down
+  docker compose -f docker-compose.yml -f compose-upstreams/clear-ports.yml -f compose-upstreams/upstream-$p.yml down
 done
 
 echo "All 20 stacks stopped."
