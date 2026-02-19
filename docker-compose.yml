@@ -64,6 +64,7 @@ services:
     volumes:
       - ./ssl:/work/cassl
       - ./hooks:/work/hooks
+      - ./iteration:/work/iteration
     depends_on:
       - chrome
     ports:
@@ -97,16 +98,9 @@ services:
       # Outputs full HTTP headers for more in-depth debugging
       TRACE: false
 
-      # Hook that runs on proxy start
-      # ON_START_HOOK_FILE_PATH: /work/hooks/onstart.js
-
-      # Hook that runs before each HTTP request
-      # is proxied through thermoptic
-      # BEFORE_REQUEST_HOOK_FILE_PATH: /work/hooks/beforerequest.js
-
-      # Hook that runs after each HTTP request
-      # is proxied through thermoptic.
-      # AFTER_REQUEST_HOOK_FILE_PATH: /work/hooks/afterrequest.js
+      # Iteration state module: runs after each request, carries state between calls,
+      # and can optionally interact with the browser via CDP (lazy onstart, periodic refresh).
+      ITERATION_STATE_MODULE_PATH: /work/iteration/example-state.js
 
       # Environment variable which is set to tell
       # thermoptic that it's running inside a container.

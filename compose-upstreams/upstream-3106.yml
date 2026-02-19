@@ -1,0 +1,17 @@
+name: thermoptic-3106
+
+services:
+  proxyrouter:
+    container_name: thermoptic-3106-proxyrouter
+    environment:
+      UPSTREAM_PROXY: "http://host.docker.internal:3106"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  chrome:
+    container_name: thermoptic-3106-chrome
+    ports:
+      - "127.0.0.1:14127:14111"
+  thermoptic:
+    container_name: thermoptic-3106
+    ports:
+      - "127.0.0.1:3106:1234"

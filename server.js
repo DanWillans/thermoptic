@@ -10,6 +10,8 @@ import { start_health_monitor } from './healthcheck.js';
 const PROXY_AUTHENTICATION_ENABLED = Boolean(process.env.PROXY_USERNAME && process.env.PROXY_PASSWORD);
 const DEBUG_TRACE_HEADER_NAME = 'X-Debug-Id';
 
+const global_iteration_state = {};
+
 // Top-level error handling for unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
     const app_logger = logger.get_logger();
@@ -87,20 +89,11 @@ process.on('uncaughtException', (err) => {
 
             request_logger.debug('Authentication successful for inbound proxy request.');
 
-            let cdp_instance = null;
+            let iteration_cdp_instance = null;
             let request_completed = false;
             let response_status_code = null;
             let request_error = null;
             try {
-                // We now check if there is an before-request hook defined.
-                if (process.env.BEFORE_REQUEST_HOOK_FILE_PATH) {
-                    request_logger.info('Executing before-request hook.', {
-                        hook_file: process.env.BEFORE_REQUEST_HOOK_FILE_PATH
-                    });
-                    cdp_instance = await cdp.start_browser_session();
-                    await utils.run_hook_file(process.env.BEFORE_REQUEST_HOOK_FILE_PATH, cdp_instance, proxy_request, null, request_logger);
-                }
-
                 const response = await requestengine.process_request(
                     request_logger,
                     proxy_request.url,
@@ -111,15 +104,48 @@ process.on('uncaughtException', (err) => {
                     proxy_request.requestData,
                 );
 
-                // We now check if there is an after-request hook defined.
-                if (process.env.AFTER_REQUEST_HOOK_FILE_PATH) {
-                    if (!cdp_instance) {
-                        cdp_instance = await cdp.start_browser_session();
+                if (process.env.ITERATION_STATE_MODULE_PATH) {
+                    const iteration_state = global_iteration_state;
+
+                    const iteration_context = {
+                        state: iteration_state,
+                        request: proxy_request,
+                        response: response,
+                        logger: request_logger
+                    };
+
+                    const iteration_result = await utils.run_iteration_module(
+                        process.env.ITERATION_STATE_MODULE_PATH,
+                        iteration_context,
+                        request_logger
+                    );
+
+                    Object.assign(iteration_state, iteration_result.updated_state);
+
+                    if (iteration_result.wants_cdp && typeof iteration_result.cdp_callback === 'function') {
+                        request_logger.info('Iteration module requested CDP interaction; opening browser session.');
+                        iteration_cdp_instance = await cdp.start_browser_session();
+                        try {
+                            const post_cdp_state = await iteration_result.cdp_callback(
+                                iteration_cdp_instance,
+                                iteration_state,
+                                request_logger
+                            );
+                            if (post_cdp_state && typeof post_cdp_state === 'object') {
+                                Object.assign(iteration_state, post_cdp_state);
+                            }
+                        } finally {
+                            try {
+                                await iteration_cdp_instance.close();
+                            } catch (closeErr) {
+                                request_logger.warn('Failed to close iteration CDP session.', {
+                                    message: closeErr.message,
+                                    stack: closeErr.stack
+                                });
+                            }
+                            iteration_cdp_instance = null;
+                        }
                     }
-                    request_logger.info('Executing after-request hook.', {
-                        hook_file: process.env.AFTER_REQUEST_HOOK_FILE_PATH
-                    });
-                    await utils.run_hook_file(process.env.AFTER_REQUEST_HOOK_FILE_PATH, cdp_instance, proxy_request, response, request_logger);
                 }
 
                 attach_debug_id_header(response, request_id);
@@ -141,9 +167,9 @@ process.on('uncaughtException', (err) => {
                 request_logger.error('Proxy request failed.', request_error);
                 throw err;
             } finally {
-                if (cdp_instance) {
+                if (iteration_cdp_instance) {
                     try {
-                        await cdp_instance.close();
+                        await iteration_cdp_instance.close();
                     } catch (closeErr) {
                         request_logger.warn('Failed to close CDP session.', {
                             message: closeErr.message,

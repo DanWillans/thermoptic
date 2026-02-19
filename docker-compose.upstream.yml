@@ -1,0 +1,11 @@
+# Use with: docker compose -f docker-compose.yml -f docker-compose.upstream.yml up
+#
+# Routes all outbound traffic through an upstream proxy on the host at localhost:3090.
+# Chrome -> proxyrouter -> host:3090 -> internet
+services:
+  proxyrouter:
+    environment:
+      UPSTREAM_PROXY: "http://host.docker.internal:3090"
+    extra_hosts:
+      # Required on Linux for host.docker.internal to resolve to the host
+      - "host.docker.internal:host-gateway"

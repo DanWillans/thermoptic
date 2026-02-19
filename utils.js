@@ -34,6 +34,52 @@ export async function run_hook_file(hook_file_path, cdp, request, response, prov
     }
 }
 
+export async function run_iteration_module(module_path, context, provided_logger) {
+    const utils_logger = provided_logger || logger.get_logger();
+
+    async function file_exists(path) {
+        try {
+            const stats = await stat(path);
+            return stats.isFile();
+        } catch {
+            return false;
+        }
+    }
+
+    const abs_path = resolve(module_path);
+
+    if (!(await file_exists(abs_path))) {
+        utils_logger.error('Iteration state module file does not exist.', {
+            module_path: abs_path
+        });
+        process.exit(1);
+    }
+
+    const iteration_module = await import(abs_path);
+
+    if (typeof iteration_module.after_iteration !== 'function') {
+        utils_logger.error('"after_iteration" export not found or not a function.', {
+            module_path: abs_path
+        });
+        process.exit(1);
+    }
+
+    const result = await iteration_module.after_iteration(context);
+
+    if (!result || typeof result !== 'object') {
+        utils_logger.warn('Iteration module did not return a valid result; ignoring.', {
+            module_path: abs_path
+        });
+        return { updated_state: context.state, wants_cdp: false };
+    }
+
+    return {
+        updated_state: result.updated_state !== undefined ? result.updated_state : context.state,
+        wants_cdp: Boolean(result.wants_cdp),
+        cdp_callback: typeof result.cdp_callback === 'function' ? result.cdp_callback : undefined
+    };
+}
+
 export function wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }

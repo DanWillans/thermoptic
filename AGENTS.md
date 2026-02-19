@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - `server.js` composes `proxy.js`, `requestengine.js`, and `cdp.js` to translate incoming HTTP requests into Chrome-driven sessions.
 - `routes.js` handles request classification; `fetchgen.js` and `utils.js` emit browser-side helpers and shared utilities.
-- Hooks live in `hooks/` and must export `async hook`; keep logic focused and human-paced.
+- Iteration state modules live in `iteration/` and must export `async function after_iteration(context)`; they run after each request and can carry state between calls, optionally interacting with the browser via CDP (e.g. lazy onstart, periodic cookie refresh).
 - Vendorized AnyProxy sources stay under `anyproxy/`; refer to `_readme/`, `browser-tests/`, and `tutorials/` for diagrams, fixtures, and walkthroughs.
 
 ## Build, Test, and Development Commands
@@ -17,7 +17,7 @@
 - Use ES modules with four-space indentation and explicit semicolons; avoid implicit returns for side-effectful steps.
 - Use snake_case for variables and function names; reserve PascalCase for factory or constructor helpers and UPPER_SNAKE_CASE for constants.
 - Use `import * as` when sharing utility bundles and preserve `[STATUS]`/`[WARN]` log tags.
-- Keep hooks deterministic with short randomized delays to emulate human pacing.
+- Keep iteration module CDP callbacks deterministic with short randomized delays to emulate human pacing.
 - Skip double-question-mark (`??`) and similar ternary shortcuts that our tooling rewrites; use explicit ternary expressions or logical fallbacks instead.
 - Do not reuse a single CDP session/tab across concurrent requests; each request must isolate its DevTools state.
 - Preserve the bookmark-driven navigation hack—direct `Page.navigate` calls cannot replace it without breaking JA4 parity.

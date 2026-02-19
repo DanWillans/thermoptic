@@ -21,6 +21,7 @@ COPY utils.js /work/
 COPY wait-for-cdp.js /work/
 COPY logger.js /work/
 COPY scripts /work/scripts/
+COPY iteration /work/iteration/
 
 COPY docker-entrypoint.sh /work/
 RUN chmod +x /work/docker-entrypoint.sh

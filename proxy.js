@@ -1,6 +1,5 @@
 import * as node_crypto from 'crypto';
 import { STATUS_CODES } from 'node:http';
-import * as cdp from './cdp.js';
 import * as utils from './utils.js';
 import * as logger from './logger.js';
 import { CA_CERTIFICATE_PATH, CA_PRIVATE_KEY_PATH, ensure_ca_material } from './certificates.js';
@@ -81,7 +80,6 @@ export async function get_http_proxy(port, ready_func, error_func, on_request_fu
     const { getLocal: get_mockttp_local, generateCACertificate } = await load_mockttp();
 
     await ensure_ca_material(proxy_logger, generateCACertificate);
-    await run_on_start_hook_if_configured(proxy_logger);
 
     const mockttp_server = get_mockttp_local({
         http2: true,
@@ -247,36 +245,6 @@ class MockttpProxyWrapper {
             }
         }
         this.auth_listeners_attached = true;
-    }
-}
-
-async function run_on_start_hook_if_configured(proxy_logger) {
-    if (!process.env.ON_START_HOOK_FILE_PATH) {
-        return;
-    }
-
-    proxy_logger.info('A thermoptic onstart hook has been declared, running hook before starting proxy server...', {
-        hook_file: process.env.ON_START_HOOK_FILE_PATH
-    });
-
-    const cdp_instance = await cdp.start_browser_session();
-    try {
-        await utils.run_hook_file(
-            process.env.ON_START_HOOK_FILE_PATH,
-            cdp_instance,
-            null,
-            null,
-            proxy_logger
-        );
-    } finally {
-        try {
-            await cdp_instance.close();
-        } catch (closeErr) {
-            proxy_logger.warn('Failed to close CDP session while completing onstart hook.', {
-                message: closeErr.message,
-                stack: closeErr.stack
-            });
-        }
     }
 }
 
@@ -452,12 +420,18 @@ function get_or_create_connection_state(request) {
         state = {
             key: key,
             is_authenticated: false,
-            last_seen: Date.now()
+            last_seen: Date.now(),
+            iteration_state: {}
         };
         connection_states.set(key, state);
     } else {
         state.last_seen = Date.now();
     }
+
+    if (!state.iteration_state || typeof state.iteration_state !== 'object') {
+        state.iteration_state = {};
+    }
+
     return state;
 }
 
@@ -492,11 +466,16 @@ function handle_proxy_authorization_header(socket, proxy_auth_header) {
         state = {
             key: connection_key,
             is_authenticated: false,
-            last_seen: Date.now()
+            last_seen: Date.now(),
+            iteration_state: {}
         };
         connection_states.set(connection_key, state);
     } else {
         state.last_seen = Date.now();
+    }
+
+    if (!state.iteration_state) {
+        state.iteration_state = {};
     }
 
     const is_valid = validate_proxy_authorization(proxy_auth_header);

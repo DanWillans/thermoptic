@@ -156,25 +156,36 @@ The ethical considerations and the complex game theory at play here is greater t
 
 For further banter around the scraping arms race I ask that you at least buy me a beer first. To be honest, I hate writing these boring ethical essays in my READMEs so feel free to just imagine me as an evil nerd who wants to make your life harder.
 
-## Handling browser JavaScript fingerprinting with `thermoptic` hooks
+## Handling browser JavaScript fingerprinting with the iteration state module
 
-`thermoptic` allows you to configure custom scripting in order to perform browser actions when:
-* The browser is first started (environment variable `ON_START_HOOK_FILE_PATH`)
-* A request is about to be proxied (environment variable `BEFORE_REQUEST_HOOK_FILE_PATH`)
-* A request has just finished being proxied (environment variable `AFTER_REQUEST_HOOK_FILE_PATH`)
+`thermoptic` supports a stateful iteration module that runs after each proxy request. Unlike the deprecated hooks, it carries state between calls and can optionally interact with the browser via CDP. Use it to:
 
-This allows you to use the Chrome Debugging Protocol to click around and set the appropriate cookies for sites that require a real web browser for a verification step. You can then use the `thermoptic` proxy to continue your session cloaked through the same browser.
+* Run a lazy onstart (e.g. solve Cloudflare on the first request)
+* Periodically refresh cookies via CDP after every N requests
 
-To do this, modify the appropriate hook JavaScript file with your custom code to orchestrate the browser appropriately via the provided `chrome-remote-interface` interface:
+Set `ITERATION_STATE_MODULE_PATH` to the path of your module. The module must export `async function after_iteration(context)` and may return `{ updated_state, wants_cdp, cdp_callback }`.
 
-```
-// `cdp` is an instance of a connected browser, use it to run your browser actions
-export async function hook(cdp) {
-    console.log(`[STATUS] Browser start hook called successfully!`);
+```javascript
+export async function after_iteration(context) {
+    const { state, request, response, logger } = context;
+    state.request_count = (state.request_count || 0) + 1;
+
+    if (state.request_count === 1) {
+        return { updated_state: state, wants_cdp: true, cdp_callback: run_onstart };
+    }
+    if (state.request_count % 4 === 0) {
+        return { updated_state: state, wants_cdp: true, cdp_callback: refresh_cookies };
+    }
+    return { updated_state: state, wants_cdp: false };
+}
+
+async function run_onstart(cdp_instance, state, logger) {
+    // Solve Cloudflare, login, etc.
+    return state;
 }
 ```
 
-For an example implementation, see the [`./hooks/onstart.js`](https://github.com/mandatoryprogrammer/thermoptic/blob/main/hooks/onstart.js) file which [bypasses the Cloudflare turnstile CAPTCHA](https://github.com/mandatoryprogrammer/thermoptic/blob/main/tutorials/turnstile/cloudflare-turnstile-bypass.md) (and other Cloudflare anti-bot checks).
+See [`iteration/example-state.js`](iteration/example-state.js) for a full example. For the legacy Cloudflare turnstile bypass pattern, refer to [tutorials/turnstile/cloudflare-turnstile-bypass.md](tutorials/turnstile/cloudflare-turnstile-bypass.md); adapt its logic into your iteration module's `cdp_callback`.
 
 ## Control the Dockerized Chrome Browser via Web UI (Xpra)
 
@@ -217,11 +228,7 @@ These environment variables specify how `thermoptic` should be configured when i
 
 `HEALTHCHECK_ENDPOINT_PATH`: The HTTP path served by the health-check endpoint described above. Change it if you need a different URL.
 
-`ON_START_HOOK_FILE_PATH`: Custom Node code to run on proxy start. The proxy will not begin listening until this hook has completed, see the example in `./hooks/`. The sample demonstrates using the browser to click through Cloudflare's JavaScript browser check before starting the proxy.
-
-`BEFORE_REQUEST_HOOK_FILE_PATH`: Custom Node code to run before a request has been proxied. This is useful if you need the browser to pass some check before a site HTTP request is made.
-
-`AFTER_REQUEST_HOOK_FILE_PATH`: Custom Node code to run after a request has been proxied. Often this is useful to do things like clean up cookies that have been set by the client via `Cookie` header.
+`ITERATION_STATE_MODULE_PATH`: Path to a module that exports `after_iteration(context)`. Runs after each proxy request, carries state between calls, and can optionally interact with the browser via CDP. Use for lazy onstart (e.g. solve Cloudflare on first request) and periodic cookie refresh. See `iteration/example-state.js`.
 
 `DEBUG`: Set this to `true` when you hit a bug so thermoptic prints verbose diagnostics before you file an issue; leave it `false` during normal operation.
 
