@@ -5,7 +5,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-for p in $(seq 3090 3109); do
+for p in $(seq 3090 3095); do
   echo "Starting thermoptic-$p..."
   docker compose -f compose-upstreams/base.yml -f compose-upstreams/upstream-$p.yml up -d
 done
