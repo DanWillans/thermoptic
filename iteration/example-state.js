@@ -54,6 +54,10 @@ function pick_random_url(urls) {
     return urls[index];
 }
 
+function random_in_range(min_inclusive, max_inclusive) {
+    return Math.floor(Math.random() * (max_inclusive - min_inclusive + 1)) + min_inclusive;
+}
+
 function should_block_request(resource_type, url) {
     const type = resource_type || '';
     if (BLOCKED_RESOURCE_TYPES.has(type)) {
@@ -201,13 +205,41 @@ async function refresh_cookies_via_browser(cdp_instance, state, active_logger) {
         throw connect_err;
     }
 
-    const { Page } = client;
+    const { Page, Input } = client;
     try {
         await Page.enable();
         await enable_bandwidth_saving_fetch(client, active_logger);
-        await Page.reload();
-        await Page.loadEventFired();
-        active_logger.info('CDP refresh: page reloaded successfully.');
+
+        const click = async (x, y) => {
+            await Input.dispatchMouseEvent({
+                type: 'mousePressed',
+                x: x,
+                y: y,
+                button: 'left',
+                clickCount: 1
+            });
+            await Input.dispatchMouseEvent({
+                type: 'mouseReleased',
+                x: x,
+                y: y,
+                button: 'left',
+                clickCount: 1
+            });
+        };
+
+        const x1 = random_in_range(110, 300);
+        const y1 = random_in_range(20, 100);
+        const x2 = random_in_range(110, 300);
+        const y2 = random_in_range(20, 100);
+
+        await click(x1, y1);
+        await new Promise((resolve) => setTimeout(resolve, 100 + Math.floor(Math.random() * 150)));
+        await click(x2, y2);
+
+        active_logger.info('CDP refresh: clicked twice in viewport.', {
+            click1: { x: x1, y: y1 },
+            click2: { x: x2, y: y2 }
+        });
     } catch (op_err) {
         if (is_target_gone_error(op_err)) {
             active_logger.info('CDP refresh: target lost during refresh (likely browser restarted); running onstart instead.', {
