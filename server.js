@@ -190,15 +190,101 @@ process.on('uncaughtException', (err) => {
     );
     http_proxy.start();
 
+    const on_chrome_recovered = process.env.ITERATION_STATE_MODULE_PATH
+        ? () => run_iteration_onstart_at_startup(app_logger)
+        : undefined;
+
     try {
-        await start_health_monitor();
+        await start_health_monitor({ on_chrome_recovered });
     } catch (monitor_error) {
         app_logger.error('Failed to start health monitor.', {
             message: monitor_error instanceof Error ? monitor_error.message : String(monitor_error),
             stack: monitor_error instanceof Error ? monitor_error.stack : undefined
         });
     }
+
+    if (process.env.ITERATION_STATE_MODULE_PATH) {
+        run_iteration_onstart_at_startup(app_logger).catch((err) => {
+            app_logger.warn('Iteration onstart at startup failed; will run on first refresh when tab is needed.', {
+                message: err instanceof Error ? err.message : String(err)
+            });
+        });
+    }
 })();
+
+async function run_iteration_onstart_at_startup(app_logger) {
+    const module_path = process.env.ITERATION_STATE_MODULE_PATH;
+    if (!module_path) {
+        return;
+    }
+
+    const { resolve } = await import('path');
+    const { stat } = await import('fs/promises');
+    const abs_path = resolve(module_path);
+    let exists = false;
+    try {
+        const st = await stat(abs_path);
+        exists = st.isFile();
+    } catch (_e) {
+        /* no-op */
+    }
+    if (!exists) {
+        return;
+    }
+
+    const iteration_module = await import(abs_path);
+    if (typeof iteration_module.run_onstart_setup !== 'function') {
+        return;
+    }
+
+    const max_attempts = 5;
+    const delay_ms = 2000;
+    let last_error = null;
+
+    let cdp_instance = null;
+    for (let attempt = 1; attempt <= max_attempts; attempt += 1) {
+        cdp_instance = null;
+        try {
+            app_logger.info('Running iteration onstart at startup (Chrome ready check).', {
+                attempt: attempt,
+                max_attempts: max_attempts
+            });
+            cdp_instance = await cdp.start_browser_session();
+            const post_cdp_state = await iteration_module.run_onstart_setup(
+                cdp_instance,
+                global_iteration_state,
+                app_logger
+            );
+            if (post_cdp_state && typeof post_cdp_state === 'object') {
+                Object.assign(global_iteration_state, post_cdp_state);
+            }
+            app_logger.info('Iteration onstart at startup completed successfully.');
+            return;
+        } catch (err) {
+            last_error = err;
+            app_logger.warn('Iteration onstart at startup attempt failed.', {
+                attempt: attempt,
+                max_attempts: max_attempts,
+                message: err instanceof Error ? err.message : String(err)
+            });
+            if (attempt < max_attempts) {
+                await new Promise((r) => setTimeout(r, delay_ms));
+            }
+        } finally {
+            if (cdp_instance) {
+                try {
+                    await cdp_instance.close();
+                } catch (close_err) {
+                    app_logger.warn('Failed to close onstart CDP session.', {
+                        message: close_err && close_err.message ? close_err.message : String(close_err)
+                    });
+                }
+            }
+        }
+    }
+
+    throw last_error || new Error('Iteration onstart at startup failed after retries.');
+}
 
 function get_authentication_status(request) {
     if (!PROXY_AUTHENTICATION_ENABLED) {

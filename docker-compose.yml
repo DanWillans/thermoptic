@@ -27,6 +27,7 @@ services:
       - chrome_profile:/home/chromeuser/profile
     environment:
       PORT: 3003
+      CHROME_DEBUGGING_PORT: 9222
       CHROME_CONTROL_PORT: 9223
       CHROME_CONTROL_COOLDOWN_MS: 5000
 
@@ -124,6 +125,10 @@ services:
       # Port of the Chrome "controller" service which is used
       # to restart Chrome in the event of a freeze/jam.
       CHROME_CONTROL_PORT: 9223
+
+      # How often the health probe runs (ms). Shorter = faster recovery
+      # detection when Chrome restarts (e.g. after kill -9).
+      HEALTHCHECK_INTERVAL_MS: 5000
 
 volumes:
   chrome_profile:

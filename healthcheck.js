@@ -139,7 +139,7 @@ function build_restart_url(default_port) {
     return `${protocol}://${host}:${control_port}${path}`;
 }
 
-function build_health_config() {
+function build_health_config(options = {}) {
     const enabled = parse_boolean(process.env.HEALTHCHECK_ENABLED, DEFAULT_HEALTHCHECK_ENABLED);
 
     const endpoint_port = parse_integer(process.env.HEALTHCHECK_ENDPOINT_PORT, DEFAULT_HEALTHCHECK_ENDPOINT_PORT, 1);
@@ -175,6 +175,7 @@ function build_health_config() {
     const target_url_object = new URL(target_url);
 
     return {
+        on_chrome_recovered: typeof options.on_chrome_recovered === 'function' ? options.on_chrome_recovered : undefined,
         enabled,
         endpoint_port,
         endpoint_path,
@@ -333,6 +334,7 @@ function trigger_chrome_restart(config, state) {
             const success = res.statusCode && res.statusCode >= 200 && res.statusCode < 300;
             if (success) {
                 state.last_restart_at = Date.now();
+                state.chrome_restart_pending = true;
                 health_logger.warn('Requested Chrome restart due to failed health probe.', {
                     restart_url: config.restart_url,
                     status_code: res.statusCode
@@ -372,7 +374,18 @@ async function execute_probe_cycle(config, state) {
     state.probe_in_progress = true;
     try {
         await perform_health_probe(config, state);
+        const recovered = state.chrome_restart_pending || state.last_probe_failed;
+        state.chrome_restart_pending = false;
+        state.last_probe_failed = false;
+        if (recovered && typeof config.on_chrome_recovered === 'function') {
+            config.on_chrome_recovered().catch((err) => {
+                health_logger.error('on_chrome_recovered callback failed.', {
+                    message: err instanceof Error ? err.message : String(err)
+                });
+            });
+        }
     } catch (error) {
+        state.last_probe_failed = true;
         state.failure_count += 1;
         const details = error && error.details ? error.details : undefined;
         health_logger.warn('Health probe failed.', {
@@ -402,8 +415,8 @@ function start_probe_timer(config, state) {
     return interval_handle;
 }
 
-export async function start_health_monitor() {
-    const config = build_health_config();
+export async function start_health_monitor(options = {}) {
+    const config = build_health_config(options);
 
     if (!config.enabled) {
         health_logger.info('Health monitor disabled by configuration.');
@@ -414,7 +427,9 @@ export async function start_health_monitor() {
         probe_in_progress: false,
         failure_count: 0,
         last_success_at: null,
-        last_restart_at: 0
+        last_restart_at: 0,
+        chrome_restart_pending: false,
+        last_probe_failed: false
     };
 
     const health_endpoint = await start_health_endpoint(config);

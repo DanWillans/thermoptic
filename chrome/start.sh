@@ -69,9 +69,13 @@ if [ "$(id -u)" -eq 0 ]; then
   echo "[WARN] 'su' is unavailable. Continuing to run Chrome as root."
 fi
 
+CHROME_DEBUGGING_PORT=${CHROME_DEBUGGING_PORT:-9222}
+export CHROME_DEBUGGING_PORT
+
 CHROME_COMMON_FLAGS=(
-  --remote-debugging-port=3002
+  "--remote-debugging-port=${CHROME_DEBUGGING_PORT}"
   --remote-debugging-address=0.0.0.0
+  --remote-allow-origins="*"
   --no-sandbox
   --user-data-dir="${CHROME_PROFILE_DIR}"
   --no-first-run
@@ -79,9 +83,15 @@ CHROME_COMMON_FLAGS=(
   --no-default-browser-check
   --disable-search-engine-choice-screen
   --disable-default-apps
+  --disable-extensions
   --disable-browser-signin
   --disable-sync
-  --disable-features=ChromeWhatsNewUI,PermissionPromptSurveyUi,PrivacySandboxSettings4
+  --disable-component-update
+  --disable-domain-reliability
+  --disable-client-side-phishing-detection
+  --metrics-recording-only
+  --mute-audio
+  --disable-features=ChromeWhatsNewUI,PermissionPromptSurveyUi,PrivacySandboxSettings4,MediaRouter,OptimizationHints,Translate
   --window-position=0,0
   "--window-size=${CHROME_SCREEN_WIDTH},${CHROME_SCREEN_HEIGHT}"
   --start-maximized
@@ -210,7 +220,7 @@ fi
 
 # Forward the 3003 to 0.0.0.0 so we can hit it
 # from the other containers.
-socat TCP-LISTEN:3003,fork TCP:127.0.0.1:3002 &
+socat TCP-LISTEN:3003,fork TCP:127.0.0.1:${CHROME_DEBUGGING_PORT} &
 
 # Launch chrome restart control server
 echo "[STATUS] Starting Chrome restart control server on port ${CHROME_CONTROL_PORT}..."
