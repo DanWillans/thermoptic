@@ -12,7 +12,7 @@ services:
     environment:
       ENABLE_GUI_CONTROL: "true"
       XPRA_PORT: 14097
-    ports:
+    ports: !reset
       - "127.0.0.1:14097:14097"
   thermoptic:
     container_name: thermoptic-upstream-3097
