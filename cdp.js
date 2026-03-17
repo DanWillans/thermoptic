@@ -1644,11 +1644,6 @@ async function _manual_browser_visit(tab, url) {
         const resolve = async (val) => {
             if (!settled) {
                 settled = true;
-                try {
-                    await tab.Fetch.disable();
-                } catch {
-                    // Best-effort cleanup only.
-                }
                 outerResolve(val);
             }
         };
@@ -1656,11 +1651,6 @@ async function _manual_browser_visit(tab, url) {
         const reject = async (err) => {
             if (!settled) {
                 settled = true;
-                try {
-                    await tab.Fetch.disable();
-                } catch {
-                    // Best-effort cleanup only.
-                }
                 outerReject(err instanceof Error ? err : new Error(String(err)));
             }
         };
@@ -1669,28 +1659,48 @@ async function _manual_browser_visit(tab, url) {
 
         (async() => {
             try {
-                const { Fetch, Page } = tab;
+                const { Network, Page } = tab;
 
-                await Fetch.enable({
-                    patterns: [{ urlPattern: capture_url, requestStage: 'Response' }]
+                // Use the Network domain instead of Fetch for response capture.
+                // Chrome 146+ does not reliably fire Fetch.requestPaused at
+                // requestStage:Response for main-frame navigation responses, but
+                // Network.responseReceived + Network.loadingFinished always fire.
+                await Network.enable();
+                await Page.enable();
+
+                let navigation_request_id = null;
+                let response_status = null;
+                let response_headers_raw = null;
+
+                // Track the outgoing navigation request so we can match its response.
+                tab.on('Network.requestWillBeSent', ({ requestId, request, type, redirectResponse }) => {
+                    if (type !== 'Document') return;
+                    // Follow redirect chains: if a previous request for our URL
+                    // redirected to a new URL, start tracking the new requestId.
+                    if (redirectResponse) {
+                        if (requestId === navigation_request_id) {
+                            navigation_request_id = requestId;
+                        }
+                        return;
+                    }
+                    if (request.url === capture_url) {
+                        navigation_request_id = requestId;
+                    }
                 });
 
-                Fetch.requestPaused(async({ requestId, responseStatusCode, responseHeaders, responseErrorReason }) => {
-                    try {
-                        if (responseErrorReason) {
-                            await resolve({
-                                statusCode: 502,
-                                header: {
-                                    [config.ERROR_HEADER_NAME]: `Request error: ${responseErrorReason}`
-                                },
-                                body: ''
-                            });
-                            return;
-                        }
+                tab.on('Network.responseReceived', ({ requestId, response }) => {
+                    if (requestId === navigation_request_id) {
+                        response_status = response.status;
+                        response_headers_raw = response.headers;
+                    }
+                });
 
+                tab.on('Network.loadingFinished', async ({ requestId }) => {
+                    if (requestId !== navigation_request_id || settled) return;
+                    try {
                         let raw_body = Buffer.alloc(0);
-                        if (!REDIRECT_STATUS_CODES.includes(responseStatusCode)) {
-                            const response_tmp = await Fetch.getResponseBody({ requestId });
+                        if (!REDIRECT_STATUS_CODES.includes(response_status)) {
+                            const response_tmp = await Network.getResponseBody({ requestId });
                             if (response_tmp.base64Encoded) {
                                 raw_body = Buffer.from(response_tmp.body, 'base64');
                             } else {
@@ -1698,14 +1708,10 @@ async function _manual_browser_visit(tab, url) {
                             }
                         }
 
-                        await Fetch.fulfillRequest({
-                            requestId,
-                            responseCode: 200,
-                            responseHeaders: [{ name: 'Content-Type', value: 'text/html' }],
-                            body: Buffer.from(fetchgen.get_blank_response()).toString('base64'),
-                        });
-
-                        const normalized_headers = utils.fetch_headers_to_proxy_response_headers(responseHeaders);
+                        const header_pairs = Object.entries(response_headers_raw || {}).map(
+                            ([name, value]) => ({ name, value })
+                        );
+                        const normalized_headers = utils.fetch_headers_to_proxy_response_headers(header_pairs);
                         if (typeof normalized_headers['content-length'] !== 'undefined') {
                             normalized_headers['content-length'] = String(raw_body.length);
                         }
@@ -1720,7 +1726,7 @@ async function _manual_browser_visit(tab, url) {
                             body_length: raw_body.length
                         });
                         await resolve({
-                            statusCode: responseStatusCode,
+                            statusCode: response_status,
                             header: normalized_headers,
                             body: raw_body
                         });
@@ -1729,7 +1735,15 @@ async function _manual_browser_visit(tab, url) {
                     }
                 });
 
-                await Page.enable();
+                tab.on('Network.loadingFailed', async ({ requestId, errorText }) => {
+                    if (requestId !== navigation_request_id || settled) return;
+                    await resolve({
+                        statusCode: 502,
+                        header: { [config.ERROR_HEADER_NAME]: `Request error: ${errorText}` },
+                        body: ''
+                    });
+                });
+
                 const navigation_result = await Page.navigate({ url: capture_url });
                 if (navigation_result && navigation_result.errorText) {
                     throw new Error(navigation_result.errorText);

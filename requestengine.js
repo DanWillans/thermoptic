@@ -21,7 +21,9 @@ const MATCH_RULES = [{
         "route": routes.browser_manual_url_visit,
         "requirements": {
             "method": "GET",
-            "cors_simple": true,
+            // Navigation requests are not subject to CORS preflight, so cors_simple
+            // is irrelevant here — modern Chrome sends sec-ch-ua-* and other
+            // non-simple headers on navigations, which would otherwise break matching.
             "requester_resource": "document",
             "requester_method": "none",
             "requester_site_type": "navigate",
