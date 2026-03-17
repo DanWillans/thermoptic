@@ -1540,6 +1540,18 @@ async function intercept_navigation_and_capture(tab, url_to_host_on, html_to_ser
                             formatted_headers[header_pair.name] = header_pair.value;
                         });
 
+                        // Chrome decodes compressed bodies before returning via
+                        // Fetch.getResponseBody, so content-length must reflect
+                        // the decoded size and content-encoding must be removed.
+                        if (typeof formatted_headers['content-length'] !== 'undefined') {
+                            formatted_headers['content-length'] = String(raw_body.length);
+                        }
+                        if (typeof formatted_headers['Content-Length'] !== 'undefined') {
+                            formatted_headers['Content-Length'] = String(raw_body.length);
+                        }
+                        delete formatted_headers['content-encoding'];
+                        delete formatted_headers['Content-Encoding'];
+
                         const response_string = fetchgen.get_blank_response();
                         await Fetch.fulfillRequest({
                             requestId,
