@@ -1721,7 +1721,7 @@ async function _manual_browser_visit(tab, url) {
                         }
 
                         const header_pairs = Object.entries(response_headers_raw || {}).map(
-                            ([name, value]) => ({ name, value })
+                            ([name, value]) => ({ name, value: value.replace(/\n/g, ', ') })
                         );
                         const normalized_headers = utils.fetch_headers_to_proxy_response_headers(header_pairs);
                         if (typeof normalized_headers['content-length'] !== 'undefined') {
