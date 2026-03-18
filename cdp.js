@@ -1986,3 +1986,178 @@ export async function open_tab_to_intercept(tab, url) {
     await Page.navigate({ url: url, transitionType: 'other' });
     await Page.loadEventFired();
 }
+
+// --- Control Plane CDP Functions ---
+
+export async function get_all_cookies(domain) {
+    const browser = await start_browser_session();
+    try {
+        const { Network } = browser;
+        const { cookies } = await Network.getAllCookies();
+        if (domain) {
+            return cookies.filter(c => c.domain === domain || c.domain === '.' + domain);
+        }
+        return cookies;
+    } finally {
+        await close_browser_session(browser);
+    }
+}
+
+export async function clear_cookies_for_domain(domain) {
+    const browser = await start_browser_session();
+    try {
+        const { Network } = browser;
+        if (!domain) {
+            const { cookies } = await Network.getAllCookies();
+            for (const cookie of cookies) {
+                await Network.deleteCookies({ name: cookie.name, domain: cookie.domain });
+            }
+            return { cleared: true, count: cookies.length };
+        }
+        const { cookies } = await Network.getAllCookies();
+        const matching = cookies.filter(c => c.domain === domain || c.domain === '.' + domain);
+        for (const cookie of matching) {
+            await Network.deleteCookies({ name: cookie.name, domain: cookie.domain });
+        }
+        return { cleared: true, domain, count: matching.length };
+    } finally {
+        await close_browser_session(browser);
+    }
+}
+
+export async function clear_browser_cache() {
+    const browser = await start_browser_session();
+    try {
+        const { Network } = browser;
+        await Network.clearBrowserCache();
+        return { cleared: true };
+    } finally {
+        await close_browser_session(browser);
+    }
+}
+
+export async function list_targets() {
+    const browser = await start_browser_session();
+    try {
+        const { Target } = browser;
+        const { targetInfos } = await Target.getTargets();
+        return targetInfos;
+    } finally {
+        await close_browser_session(browser);
+    }
+}
+
+export async function close_target(target_id) {
+    const browser = await start_browser_session();
+    try {
+        const { Target } = browser;
+        const { success } = await Target.closeTarget({ targetId: target_id });
+        open_tabs.delete(target_id);
+        return { closed: success, target_id };
+    } finally {
+        await close_browser_session(browser);
+    }
+}
+
+export function get_open_tabs_snapshot() {
+    const result = [];
+    for (const [target_id, tab_info] of open_tabs.entries()) {
+        result.push({
+            target_id,
+            created_at: tab_info.created_at,
+            age_ms: Date.now() - tab_info.created_at,
+            closing: tab_info.closing || false
+        });
+    }
+    return result;
+}
+
+// --- Control Session (persistent interactive tab) ---
+
+let control_session = null;
+
+async function get_control_session() {
+    if (control_session) {
+        try {
+            // Verify the session is still alive
+            const { Runtime } = control_session.tab;
+            await Runtime.evaluate({ expression: '1' });
+            return control_session;
+        } catch {
+            control_session = null;
+        }
+    }
+
+    const browser = await start_browser_session();
+    const tab_info = await new_tab(browser, 'about:blank');
+    control_session = {
+        browser,
+        tab: tab_info.tab,
+        target_id: tab_info.target_id
+    };
+    return control_session;
+}
+
+export async function close_control_session() {
+    if (!control_session) {
+        return { closed: false, reason: 'no active session' };
+    }
+    const target_id = control_session.target_id;
+    try {
+        await close_tab(control_session.browser, control_session.tab, control_session.target_id);
+    } catch (err) {
+        cdp_logger.warn('Failed to close control session tab.', {
+            message: err instanceof Error ? err.message : String(err)
+        });
+    }
+    try {
+        await close_browser_session(control_session.browser);
+    } catch {}
+    control_session = null;
+    return { closed: true, target_id };
+}
+
+export async function control_navigate(url, wait) {
+    const session = await get_control_session();
+    const { Page } = session.tab;
+    await Page.enable();
+    const nav_result = await Page.navigate({ url });
+    if (wait) {
+        await Page.loadEventFired();
+    }
+    return { navigated: true, url, frame_id: nav_result.frameId };
+}
+
+export async function control_evaluate(expression) {
+    const session = await get_control_session();
+    const { Runtime } = session.tab;
+    const result = await Runtime.evaluate({ expression, awaitPromise: true, returnByValue: true });
+    if (result.exceptionDetails) {
+        return {
+            error: true,
+            exception: result.exceptionDetails.text || result.exceptionDetails.exception?.description
+        };
+    }
+    return { result: result.result.value, type: result.result.type };
+}
+
+export async function control_screenshot(format, quality) {
+    const session = await get_control_session();
+    const { Page } = session.tab;
+    const params = { format: format || 'png' };
+    if (quality !== undefined && format === 'jpeg') {
+        params.quality = quality;
+    }
+    const { data } = await Page.captureScreenshot(params);
+    return data;
+}
+
+export async function control_get_page_info() {
+    const session = await get_control_session();
+    const { Runtime } = session.tab;
+    const result = await Runtime.evaluate({
+        expression: 'JSON.stringify({ url: location.href, title: document.title, readyState: document.readyState })',
+        returnByValue: true
+    });
+    return JSON.parse(result.result.value);
+}

@@ -2,13 +2,70 @@ import { v4 as create_request_uuid } from 'uuid';
 import * as utils from './utils.js';
 import * as proxy from './proxy.js';
 import * as cdp from './cdp.js';
+import * as config from './config.js';
 import * as requestengine from './requestengine.js';
 import * as fetchgen from './fetchgen.js';
 import * as logger from './logger.js';
 import { start_health_monitor } from './healthcheck.js';
+import { start_control_plane } from './control.js';
 
 const PROXY_AUTHENTICATION_ENABLED = Boolean(process.env.PROXY_USERNAME && process.env.PROXY_PASSWORD);
 const DEBUG_TRACE_HEADER_NAME = 'X-Debug-Id';
+const MAX_RECENT_ENTRIES = 50;
+
+const request_stats = {
+    started_at: Date.now(),
+    total_requests: 0,
+    successful_requests: 0,
+    failed_requests: 0,
+    status_codes: {},
+    recent_errors: [],
+    recent_blocks: [],
+    last_health_check: null
+};
+
+function normalize_body_to_string(body) {
+    if (body === null || body === undefined) return '';
+    if (typeof body === 'string') return body;
+    if (Buffer.isBuffer(body)) return body.toString('utf8');
+    if (Array.isArray(body)) return body.join('');
+    if (typeof body === 'object' && typeof body.toString === 'function') return body.toString();
+    return '';
+}
+
+function record_request_outcome(status_code, url, error_info, response_body) {
+    request_stats.total_requests++;
+    if (status_code !== null) {
+        request_stats.status_codes[status_code] = (request_stats.status_codes[status_code] || 0) + 1;
+    }
+    if (error_info) {
+        request_stats.failed_requests++;
+        request_stats.recent_errors.push({ timestamp: new Date().toISOString(), url, error: error_info });
+        if (request_stats.recent_errors.length > MAX_RECENT_ENTRIES) request_stats.recent_errors.shift();
+    } else {
+        request_stats.successful_requests++;
+    }
+
+    const body_text = normalize_body_to_string(response_body);
+    const is_status_block = status_code !== null && config.BLOCK_DETECTION_STATUS_CODES.includes(status_code);
+    let body_pattern_match = null;
+    if (body_text && config.BLOCK_DETECTION_BODY_PATTERNS.length > 0) {
+        for (const pattern of config.BLOCK_DETECTION_BODY_PATTERNS) {
+            if (pattern.test(body_text)) { body_pattern_match = pattern.source; break; }
+        }
+    }
+    if (is_status_block || body_pattern_match) {
+        const block_entry = {
+            timestamp: new Date().toISOString(), url, status_code,
+            reason: is_status_block && body_pattern_match ? 'status_code+body_pattern'
+                : is_status_block ? 'status_code' : 'body_pattern',
+            body: body_text || undefined
+        };
+        if (body_pattern_match) block_entry.matched_pattern = body_pattern_match;
+        request_stats.recent_blocks.push(block_entry);
+        if (request_stats.recent_blocks.length > MAX_RECENT_ENTRIES) request_stats.recent_blocks.shift();
+    }
+}
 
 // Top-level error handling for unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
@@ -90,6 +147,7 @@ process.on('uncaughtException', (err) => {
             let cdp_instance = null;
             let request_completed = false;
             let response_status_code = null;
+            let response_body = null;
             let request_error = null;
             try {
                 // We now check if there is an before-request hook defined.
@@ -136,6 +194,7 @@ process.on('uncaughtException', (err) => {
                 });
                 request_completed = true;
                 response_status_code = response.statusCode;
+                response_body = response.body;
                 return {
                     response: response
                 };
@@ -158,6 +217,12 @@ process.on('uncaughtException', (err) => {
                         });
                     }
                 }
+                record_request_outcome(
+                    response_status_code,
+                    proxy_request.url,
+                    request_error,
+                    response_body
+                );
                 const lifecycle_summary = {
                     success: request_completed,
                     status_code: response_status_code
@@ -177,6 +242,15 @@ process.on('uncaughtException', (err) => {
         app_logger.error('Failed to start health monitor.', {
             message: monitor_error instanceof Error ? monitor_error.message : String(monitor_error),
             stack: monitor_error instanceof Error ? monitor_error.stack : undefined
+        });
+    }
+
+    try {
+        await start_control_plane(request_stats);
+    } catch (control_error) {
+        app_logger.error('Failed to start control plane.', {
+            message: control_error instanceof Error ? control_error.message : String(control_error),
+            stack: control_error instanceof Error ? control_error.stack : undefined
         });
     }
 })();

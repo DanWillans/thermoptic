@@ -86,3 +86,13 @@ export const TAB_SWEEP_INTERVAL_MS = parse_env_milliseconds(
     process.env.TAB_SWEEP_INTERVAL_MS,
     DEFAULT_TAB_SWEEP_INTERVAL_MS
 );
+
+export const CONTROL_PLANE_PORT = parseInt(process.env.CONTROL_PLANE_PORT || '9090', 10);
+export const CONTROL_PLANE_ENABLED = (process.env.CONTROL_PLANE_ENABLED || 'true') !== 'false';
+export const CONTROL_PLANE_API_KEY = process.env.CONTROL_PLANE_API_KEY || '';
+
+export const BLOCK_DETECTION_STATUS_CODES = (process.env.BLOCK_DETECTION_STATUS_CODES || '403,429,503')
+    .split(',').map(s => parseInt(s.trim(), 10)).filter(n => !Number.isNaN(n));
+
+export const BLOCK_DETECTION_BODY_PATTERNS = (process.env.BLOCK_DETECTION_BODY_PATTERNS || '')
+    .split(',').map(s => s.trim()).filter(Boolean).map(s => new RegExp(s, 'i'));
