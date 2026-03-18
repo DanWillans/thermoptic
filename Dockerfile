@@ -11,6 +11,7 @@ RUN npm install
 COPY cdp.js /work/
 COPY certificates.js /work/
 COPY config.js /work/
+COPY control.js /work/
 COPY fetchgen.js /work/
 COPY healthcheck.js /work/
 COPY server.js /work/
