@@ -7,7 +7,7 @@ services:
       # Upstream proxy, leave empty "" for no proxy
       # Otherwise give a full proxy URI like:
       # http://user:pass@proxy.example:8080
-      UPSTREAM_PROXY: ""
+      # UPSTREAM_PROXY: "http://localhost:309"
     expose:
       - 3128
   # Important: This Chrome instance is not meant to be perfectly stealthy
